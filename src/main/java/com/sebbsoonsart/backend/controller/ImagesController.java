@@ -1,9 +1,12 @@
-package com.example.backend.controller;
+package com.sebbsoonsart.backend.controller;
+
+import java.util.List;
+import java.util.Map;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import java.util.List;
-import java.util.Map;
+
+import com.sebbsoonsart.backend.service.GoogleDriveService;
 
 @RestController
 public class ImagesController {
