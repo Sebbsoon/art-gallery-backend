@@ -46,7 +46,7 @@ public class GoogleDriveService {
                     "https://www.googleapis.com/drive/v3/files?q=%s&fields=files(id,name,mimeType)&key=%s",
                     encodedQuery,
                     apiKey);
-                    
+
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()
@@ -64,7 +64,13 @@ public class GoogleDriveService {
                         Map<String, String> img = new HashMap<>();
                         img.put("id", file.get("id").asText());
                         img.put("name", file.get("name").asText());
-                        img.put("url", "https://drive.google.com/uc?export=view&id=" + file.get("id").asText());
+
+                        String signedUrl = String.format(
+                                "https://www.googleapis.com/drive/v3/files/%s?alt=media&key=%s",
+                                file.get("id").asText(),
+                                apiKey);
+
+                        img.put("url", signedUrl);
                         images.add(img);
                     }
                 }
