@@ -19,7 +19,7 @@ public class ImagesController {
     }
 
     @GetMapping("/api/images")
-    @CrossOrigin(origins = "https://sebbsoon.github.io/art-gallery/")
+    @CrossOrigin(origins = "https://sebbsoon.github.io")
 
     public List<Map<String, String>> getImages() {
 
