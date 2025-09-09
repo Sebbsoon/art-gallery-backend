@@ -12,6 +12,7 @@ public class BackendApplication {
 		Dotenv dotenv = Dotenv.configure()
 				.directory(System.getProperty("user.dir"))
 				.filename(".env")
+				.ignoreIfMissing()
 				.load();
 		System.setProperty("GOOGLE_API_KEY", dotenv.get("GOOGLE_API_KEY"));
 		System.setProperty("GOOGLE_FOLDER_ID", dotenv.get("GOOGLE_FOLDER_ID"));
