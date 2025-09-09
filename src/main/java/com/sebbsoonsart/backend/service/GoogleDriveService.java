@@ -2,33 +2,51 @@ package com.sebbsoonsart.backend.service;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+@Service
 public class GoogleDriveService {
 
-    private final String API_KEY = System.getenv("GOOGLE_API_KEY");
-    private final String FOLDER_ID = System.getenv("GOOGLE_FOLDER_ID");
+    @Value("${google.api.key}")
+    private String apiKey;
+
+    @Value("${google.folder.id}")
+    private String folderId;
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     public List<Map<String, String>> fetchImages() {
-        List<Map<String, String>> images = new ArrayList<>();
-        try {
-            HttpClient client = HttpClient.newHttpClient();
-            String url = String.format(
-                    "https://www.googleapis.com/drive/v3/files?q='%s'+in+parents&fields=files(id,name,mimeType)&key=%s",
-                    FOLDER_ID,
-                    API_KEY
-            );
 
+        List<Map<String, String>> images = new ArrayList<>();
+
+        try {
+            if (apiKey == null || folderId == null) {
+                throw new IllegalStateException("GOOGLE_API_KEY or GOOGLE_FOLDER_ID not set!");
+            }
+
+            HttpClient client = HttpClient.newHttpClient();
+            String query = String.format("'%s' in parents", folderId);
+            String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+
+            String url = String.format(
+                    "https://www.googleapis.com/drive/v3/files?q=%s&fields=files(id,name,mimeType)&key=%s",
+                    encodedQuery,
+                    apiKey);
+                    
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .GET()

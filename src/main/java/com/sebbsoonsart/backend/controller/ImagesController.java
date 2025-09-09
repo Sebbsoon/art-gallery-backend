@@ -11,10 +11,16 @@ import com.sebbsoonsart.backend.service.GoogleDriveService;
 @RestController
 public class ImagesController {
 
-    private final GoogleDriveService driveService = new GoogleDriveService();
+    private final GoogleDriveService driveService;
+
+    public ImagesController(GoogleDriveService driveService) {
+        this.driveService = driveService;
+    }
 
     @GetMapping("/api/images")
     public List<Map<String, String>> getImages() {
-        return driveService.fetchImages();
+
+        List<Map<String, String>> resp = driveService.fetchImages();
+        return resp;
     }
 }
