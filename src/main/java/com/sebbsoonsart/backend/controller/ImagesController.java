@@ -31,7 +31,7 @@ public class ImagesController {
         return resp;
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("api/images/{id}")
     public ResponseEntity<byte[]> getImage(@PathVariable String id) {
         try {
             // Optionally, you can detect MIME type dynamically from Drive API
