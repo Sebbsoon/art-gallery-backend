@@ -8,18 +8,23 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import jakarta.annotation.PostConstruct;
+
 @Service
 public class GoogleDriveService {
+
+    private static final Logger log = LoggerFactory.getLogger(GoogleDriveService.class);
 
     @Value("${google.api.key}")
     private String apiKey;
@@ -27,57 +32,82 @@ public class GoogleDriveService {
     @Value("${google.folder.id}")
     private String folderId;
 
-    private final ObjectMapper mapper = new ObjectMapper();
+    private final ObjectMapper mapper;
+    private final HttpClient httpClient;
+
+    public GoogleDriveService(ObjectMapper mapper) {
+        this.mapper = mapper;
+        this.httpClient = HttpClient.newHttpClient();
+    }
+
+    @PostConstruct
+    private void validateConfig() {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("Missing required property: google.api.key");
+        }
+        if (folderId == null || folderId.isBlank()) {
+            throw new IllegalStateException("Missing required property: google.folder.id");
+        }
+    }
 
     public List<Map<String, String>> fetchImages() {
-
         List<Map<String, String>> images = new ArrayList<>();
 
+        String url = buildRequestUrl(folderId, apiKey);
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
         try {
-            if (apiKey == null || folderId == null) {
-                throw new IllegalStateException("GOOGLE_API_KEY or GOOGLE_FOLDER_ID not set!");
+            HttpResponse<String> response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                throw new IOException("Google Drive API returned status "
+                        + response.statusCode() + ": " + response.body());
             }
 
-            HttpClient client = HttpClient.newHttpClient();
-            String query = String.format("'%s' in parents", folderId);
-            String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+            images = parseImageFiles(response.body());
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Failed to fetch images from Google Drive", e);
+        }
 
-            String url = String.format(
-                    "https://www.googleapis.com/drive/v3/files?q=%s&fields=files(id,name,mimeType)&key=%s",
-                    encodedQuery,
-                    apiKey);
+        return images;
+    }
 
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .GET()
-                    .build();
+    private String buildRequestUrl(String folderId, String apiKey) {
+        String query = String.format("'%s' in parents", folderId);
+        String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
+        return String.format(
+                "https://www.googleapis.com/drive/v3/files?q=%s&fields=files(id,name,mimeType)&key=%s",
+                encodedQuery,
+                apiKey
+        );
+    }
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+    private List<Map<String, String>> parseImageFiles(String json) throws IOException {
+        List<Map<String, String>> images = new ArrayList<>();
+        JsonNode root = mapper.readTree(json);
+        JsonNode files = root.get("files");
 
-            JsonNode root = mapper.readTree(response.body());
-            JsonNode files = root.get("files");
+        if (files != null && files.isArray()) {
+            for (JsonNode file : files) {
+                String mimeType = file.path("mimeType").asText("");
+                if (mimeType.startsWith("image/")) {
+                    String id = file.path("id").asText();
+                    String name = file.path("name").asText();
 
-            if (files != null && files.isArray()) {
-                for (JsonNode file : files) {
-                    String mimeType = file.get("mimeType").asText();
-                    if (mimeType.startsWith("image/")) {
-                        Map<String, String> img = new HashMap<>();
-                        img.put("id", file.get("id").asText());
-                        img.put("name", file.get("name").asText());
+                    String publicUrl = "https://drive.google.com/uc?id=" + id;
 
-                        String signedUrl = String.format(
-                                "https://www.googleapis.com/drive/v3/files/%s?alt=media&key=%s",
-                                file.get("id").asText(),
-                                apiKey);
-
-                        img.put("url", signedUrl);
-                        images.add(img);
-                    }
+                    images.add(Map.of(
+                            "id", id,
+                            "name", name,
+                            "url", publicUrl
+                    ));
                 }
             }
-
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
         }
         return images;
     }
