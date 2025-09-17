@@ -32,6 +32,7 @@ public class ImagesController {
     }
 
     @GetMapping("api/images/{id}")
+    @CrossOrigin(origins = "https://sebbsoon.github.io")
     public ResponseEntity<byte[]> getImage(@PathVariable String id) {
         try {
             // Optionally, you can detect MIME type dynamically from Drive API
