@@ -1,9 +1,12 @@
 package com.sebbsoonsart.backend.controller;
 
+import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
@@ -24,9 +27,7 @@ public class ImagesController {
 
     @GetMapping("/api/images")
     @CrossOrigin(origins = "https://sebbsoon.github.io")
-
     public List<Map<String, String>> getImages() {
-
         List<Map<String, String>> resp = driveService.fetchImages();
         return resp;
     }
@@ -43,8 +44,20 @@ public class ImagesController {
                     .header(HttpHeaders.CONTENT_TYPE, mimeType)
                     .body(data);
 
-        } catch (Exception e) {
+        } catch (IOException | InterruptedException e) {
             return ResponseEntity.status(503).build(); // service unavailable
         }
+    }
+
+    @GetMapping("/api/filter")
+    @CrossOrigin(origins = "https://sebbsoon.github.io")
+    public ResponseEntity<Map<String, Object>> fetchFilter() {
+        Map<String, Object> resp = driveService.fetchFilter();
+        if (resp == null || resp.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.emptyMap());
+        }
+        return ResponseEntity.ok(resp);
+
     }
 }

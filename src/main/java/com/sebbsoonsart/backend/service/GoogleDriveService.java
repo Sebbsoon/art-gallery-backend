@@ -9,6 +9,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,12 @@ public class GoogleDriveService {
 
     @Value("${google.folder.id}")
     private String folderId;
+
+    @Value("${google.filter.id}")
+    private String filterId;
+
+    @Value("${google.filter.name}")
+    private String filterName;
 
     private final ObjectMapper mapper;
     private final HttpClient httpClient;
@@ -81,6 +88,55 @@ public class GoogleDriveService {
         return images;
     }
 
+    public Map<String, Object> fetchFilter() {
+        try {
+            String url = "https://www.googleapis.com/drive/v3/files/" + filterId + "?alt=media&key=" + apiKey;
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(
+                            url))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request,
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() != 200) {
+                throw new IOException("Google Drive API returned status "
+                        + response.statusCode() + ": " + response.body());
+            }
+            // Parse JSON string into Map
+            return mapper.readValue(response.body(), Map.class);
+        } catch (IOException | InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Failed to fetch data from Google Drive", e);
+            return Collections.emptyMap(); // safer than null
+        }
+    }
+
+    public byte[] downloadImage(String fileId, String mimeType) throws IOException, InterruptedException {
+        CachedImage cached = cache.get(fileId);
+        if (cached != null && Instant.now().toEpochMilli() - cached.timestamp < CACHE_TTL) {
+            return cached.data;
+        }
+
+        String url = "https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&key=" + apiKey;
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+
+        if (response.statusCode() != 200) {
+            throw new IOException(
+                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
+        }
+
+        byte[] data = response.body();
+        cache.put(fileId, new CachedImage(data));
+        return data;
+    }
+
     private String buildRequestUrl(String folderId, String apiKey) {
         String query = String.format("'%s' in parents", folderId);
         String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
@@ -112,30 +168,6 @@ public class GoogleDriveService {
             }
         }
         return images;
-    }
-
-    public byte[] downloadImage(String fileId, String mimeType) throws IOException, InterruptedException {
-        CachedImage cached = cache.get(fileId);
-        if (cached != null && Instant.now().toEpochMilli() - cached.timestamp < CACHE_TTL) {
-            return cached.data;
-        }
-
-        String url = "https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&key=" + apiKey;
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-
-        if (response.statusCode() != 200) {
-            throw new IOException(
-                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
-        }
-
-        byte[] data = response.body();
-        cache.put(fileId, new CachedImage(data));
-        return data;
     }
 
     private static class CachedImage {
