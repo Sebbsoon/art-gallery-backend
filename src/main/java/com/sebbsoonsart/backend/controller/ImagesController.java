@@ -38,8 +38,7 @@ public class ImagesController {
     @CrossOrigin(origins = "https://sebbsoon.github.io")
     public ResponseEntity<byte[]> getImage(@PathVariable String id) {
         try {
-            // Optionally, you can detect MIME type dynamically from Drive API
-            String mimeType = MediaType.IMAGE_JPEG_VALUE; // default to JPEG
+            String mimeType = MediaType.IMAGE_JPEG_VALUE;
             byte[] data = driveService.downloadImage(id, mimeType);
 
             return ResponseEntity.ok()
@@ -47,7 +46,7 @@ public class ImagesController {
                     .body(data);
 
         } catch (IOException | InterruptedException e) {
-            return ResponseEntity.status(503).build(); // service unavailable
+            return ResponseEntity.status(503).build();
         }
     }
 
@@ -67,11 +66,10 @@ public class ImagesController {
     @CrossOrigin(origins = "https://sebbsoon.github.io")
     public ResponseEntity<Map<String, Object>> updateFilter(
             @RequestBody Map<String, Object> newFilter) {
-
         try {
             Map<String, Object> saved = driveService.updateFilter(newFilter);
             return ResponseEntity.ok(saved);
-            
+
         } catch (IOException e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.emptyMap());

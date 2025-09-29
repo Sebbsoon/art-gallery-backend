@@ -1,6 +1,6 @@
 package com.sebbsoonsart.backend.service;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -40,8 +40,8 @@ public class GoogleDriveService {
     @Value("${google.filter.id}")
     private String filterId;
 
-    @Value("${google.filter.name}")
-    private String filterName;
+    @Value("${google.credentials.json}")
+    private String googleCredsJson;
 
     private final ObjectMapper mapper;
     private final HttpClient httpClient;
@@ -52,6 +52,7 @@ public class GoogleDriveService {
     public GoogleDriveService(ObjectMapper mapper) {
         this.mapper = mapper;
         this.httpClient = HttpClient.newHttpClient();
+
     }
 
     @PostConstruct
@@ -106,20 +107,19 @@ public class GoogleDriveService {
                 throw new IOException("Google Drive API returned status "
                         + response.statusCode() + ": " + response.body());
             }
-            // Parse JSON string into Map
             return mapper.readValue(response.body(), Map.class);
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Failed to fetch data from Google Drive", e);
-            return Collections.emptyMap(); 
+            return Collections.emptyMap();
         }
     }
 
     public Map<String, Object> updateFilter(Map<String, Object> newFilter) throws IOException {
         String json = mapper.writeValueAsString(newFilter);
 
-        GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new FileInputStream("service-account.json"))
+        GoogleCredentials credentials = GoogleCredentials.fromStream(
+                new ByteArrayInputStream(googleCredsJson.getBytes(StandardCharsets.UTF_8)))
                 .createScoped(Collections.singleton("https://www.googleapis.com/auth/drive.file"));
 
         credentials.refreshIfExpired();
