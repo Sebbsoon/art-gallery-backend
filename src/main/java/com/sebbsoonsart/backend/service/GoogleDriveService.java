@@ -1,5 +1,6 @@
 package com.sebbsoonsart.backend.service;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.auth.oauth2.GoogleCredentials;
 
 import jakarta.annotation.PostConstruct;
 
@@ -109,7 +111,42 @@ public class GoogleDriveService {
         } catch (IOException | InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Failed to fetch data from Google Drive", e);
-            return Collections.emptyMap(); // safer than null
+            return Collections.emptyMap(); 
+        }
+    }
+
+    public Map<String, Object> updateFilter(Map<String, Object> newFilter) throws IOException {
+        String json = mapper.writeValueAsString(newFilter);
+
+        GoogleCredentials credentials = GoogleCredentials
+                .fromStream(new FileInputStream("service-account.json"))
+                .createScoped(Collections.singleton("https://www.googleapis.com/auth/drive.file"));
+
+        credentials.refreshIfExpired();
+
+        String accessToken = credentials.getAccessToken().getTokenValue();
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://www.googleapis.com/upload/drive/v3/files/"
+                        + filterId + "?uploadType=media"))
+                .header("Authorization", "Bearer " + accessToken)
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
+                .build();
+
+        try {
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return newFilter;
+            } else {
+                throw new IOException("Drive update failed: "
+                        + response.statusCode() + " " + response.body());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted updating filter file", e);
         }
     }
 

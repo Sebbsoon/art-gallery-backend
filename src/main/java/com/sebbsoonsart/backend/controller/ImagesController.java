@@ -12,6 +12,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sebbsoonsart.backend.service.GoogleDriveService;
@@ -60,4 +62,20 @@ public class ImagesController {
         return ResponseEntity.ok(resp);
 
     }
+
+    @PutMapping("/api/filter")
+    @CrossOrigin(origins = "https://sebbsoon.github.io")
+    public ResponseEntity<Map<String, Object>> updateFilter(
+            @RequestBody Map<String, Object> newFilter) {
+
+        try {
+            Map<String, Object> saved = driveService.updateFilter(newFilter);
+            return ResponseEntity.ok(saved);
+            
+        } catch (IOException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Collections.emptyMap());
+        }
+    }
+
 }
