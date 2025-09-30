@@ -120,14 +120,14 @@ public class GoogleDriveService {
 
         GoogleCredentials credentials = GoogleCredentials.fromStream(
                 new ByteArrayInputStream(googleCredsJson.getBytes(StandardCharsets.UTF_8)))
-                .createScoped(Collections.singleton("https://www.googleapis.com/auth/drive.file"));
+                .createScoped(Collections.singleton("https://www.googleapis.com/auth/drive"));
         credentials.refreshIfExpired();
 
         String accessToken = credentials.getAccessToken().getTokenValue();
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://www.googleapis.com/upload/drive/v3/files/"
-                        + filterId + "?uploadType=media"))
+                        + filterId + "?uploadType=media&supportsAllDrives=true"))
                 .header("Authorization", "Bearer " + accessToken)
                 .header("Content-Type", "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(json))
