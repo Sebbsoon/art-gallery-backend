@@ -121,7 +121,6 @@ public class GoogleDriveService {
         GoogleCredentials credentials = GoogleCredentials.fromStream(
                 new ByteArrayInputStream(googleCredsJson.getBytes(StandardCharsets.UTF_8)))
                 .createScoped(Collections.singleton("https://www.googleapis.com/auth/drive.file"));
-
         credentials.refreshIfExpired();
 
         String accessToken = credentials.getAccessToken().getTokenValue();
