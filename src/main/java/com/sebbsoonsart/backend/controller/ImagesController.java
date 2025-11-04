@@ -1,5 +1,7 @@
 package com.sebbsoonsart.backend.controller;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
@@ -19,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sebbsoonsart.backend.service.GoogleDriveService;
+import net.coobird.thumbnailator.Thumbnails;
+
 
 @RestController
 public class ImagesController {
@@ -45,13 +49,20 @@ public class ImagesController {
         log.info("Received request to fetch image with ID={}", id);
         try {
             String mimeType = MediaType.IMAGE_JPEG_VALUE;
-            byte[] data = driveService.downloadImage(id, mimeType);
+            byte[] originalData = driveService.downloadImage(id, mimeType);
 
-            log.info("Successfully fetched image {} ({} bytes)", id, data.length);
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            Thumbnails.of(new ByteArrayInputStream(originalData))
+                    .size(1080, 1080)
+                    .outputFormat("jpeg")
+                    .toOutputStream(outputStream);
+
+            byte[] resizedData = outputStream.toByteArray();
+            log.info("Successfully resized image {} to {} bytes", id, resizedData.length);
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_TYPE, mimeType)
-                    .body(data);
+                    .body(resizedData);
 
         } catch (IOException e) {
             log.error("I/O error while fetching image {}", id, e);
