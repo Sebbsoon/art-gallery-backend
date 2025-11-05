@@ -206,6 +206,27 @@ public class GoogleDriveService {
         return images;
     }
 
+    public java.io.InputStream downloadImageAsStream(String fileId) throws IOException, InterruptedException {
+        String url = "https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&key=" + apiKey;
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
+        HttpResponse<java.io.InputStream> response = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofInputStream() // ✅ stream directly
+        );
+
+        if (response.statusCode() != 200) {
+            throw new IOException(
+                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
+        }
+
+        return response.body();
+    }
+
     private static class CachedImage {
         final byte[] data;
         final long timestamp;

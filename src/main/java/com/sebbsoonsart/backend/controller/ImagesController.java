@@ -1,15 +1,13 @@
 package com.sebbsoonsart.backend.controller;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +19,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.sebbsoonsart.backend.service.GoogleDriveService;
-import net.coobird.thumbnailator.Thumbnails;
 
+import jakarta.servlet.http.HttpServletResponse;
 
 @RestController
 public class ImagesController {
@@ -34,45 +32,25 @@ public class ImagesController {
         this.driveService = driveService;
     }
 
-    @GetMapping("/api/images")
+    @GetMapping("/api/images/{id}")
     @CrossOrigin(origins = "https://sebbsoon.github.io")
-    public List<Map<String, String>> getImages() {
-        log.info("Received request to fetch image list");
-        List<Map<String, String>> resp = driveService.fetchImages();
-        log.info("Returning {} images to client", resp.size());
-        return resp;
-    }
+    public void getImage(@PathVariable String id, HttpServletResponse response) {
+        log.info("Streaming image {}", id);
 
-    @GetMapping("api/images/{id}")
-    @CrossOrigin(origins = "https://sebbsoon.github.io")
-    public ResponseEntity<byte[]> getImage(@PathVariable String id) {
-        log.info("Received request to fetch image with ID={}", id);
-        try {
-            String mimeType = MediaType.IMAGE_JPEG_VALUE;
-            byte[] originalData = driveService.downloadImage(id, mimeType);
+        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
 
-            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-            Thumbnails.of(new ByteArrayInputStream(originalData))
-                    .size(1080, 1080)
-                    .outputFormat("jpeg")
-                    .toOutputStream(outputStream);
+        try (InputStream inputStream = driveService.downloadImageAsStream(id);
+                OutputStream outputStream = response.getOutputStream()) {
 
-            byte[] resizedData = outputStream.toByteArray();
-            log.info("Successfully resized image {} to {} bytes", id, resizedData.length);
+            inputStream.transferTo(outputStream);
+            outputStream.flush();
 
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_TYPE, mimeType)
-                    .body(resizedData);
-
-        } catch (IOException e) {
-            log.error("I/O error while fetching image {}", id, e);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("Image fetch interrupted for ID={}", id, e);
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        } catch (IOException | InterruptedException e) {
+            log.error("Failed to stream image {}", id, e);
+            response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
         }
     }
+
 
     @GetMapping("/api/filter")
     @CrossOrigin(origins = "https://sebbsoon.github.io")
