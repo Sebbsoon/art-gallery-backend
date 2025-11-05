@@ -8,12 +8,10 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,13 +44,9 @@ public class GoogleDriveService {
     private final ObjectMapper mapper;
     private final HttpClient httpClient;
 
-    private final Map<String, CachedImage> cache = new ConcurrentHashMap<>();
-    private final long CACHE_TTL = 1000 * 60 * 10;
-
     public GoogleDriveService(ObjectMapper mapper) {
         this.mapper = mapper;
         this.httpClient = HttpClient.newHttpClient();
-
     }
 
     @PostConstruct
@@ -150,10 +144,6 @@ public class GoogleDriveService {
     }
 
     public byte[] downloadImage(String fileId, String mimeType) throws IOException, InterruptedException {
-        CachedImage cached = cache.get(fileId);
-        if (cached != null && Instant.now().toEpochMilli() - cached.timestamp < CACHE_TTL) {
-            return cached.data;
-        }
 
         String url = "https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&key=" + apiKey;
         HttpRequest request = HttpRequest.newBuilder()
@@ -169,7 +159,6 @@ public class GoogleDriveService {
         }
 
         byte[] data = response.body();
-        cache.put(fileId, new CachedImage(data));
         return data;
     }
 
@@ -216,7 +205,7 @@ public class GoogleDriveService {
 
         HttpResponse<java.io.InputStream> response = httpClient.send(
                 request,
-                HttpResponse.BodyHandlers.ofInputStream() // ✅ stream directly
+                HttpResponse.BodyHandlers.ofInputStream()
         );
 
         if (response.statusCode() != 200) {
@@ -225,15 +214,5 @@ public class GoogleDriveService {
         }
 
         return response.body();
-    }
-
-    private static class CachedImage {
-        final byte[] data;
-        final long timestamp;
-
-        CachedImage(byte[] data) {
-            this.data = data;
-            this.timestamp = Instant.now().toEpochMilli();
-        }
     }
 }
