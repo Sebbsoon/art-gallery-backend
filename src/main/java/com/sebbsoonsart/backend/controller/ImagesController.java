@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import org.slf4j.Logger;
@@ -32,6 +33,17 @@ public class ImagesController {
         this.driveService = driveService;
     }
 
+    @GetMapping("/api/images")
+    @CrossOrigin(origins = "https://sebbsoon.github.io")
+
+    public List<Map<String, String>> getImages() {
+
+        log.info("Received request to fetch image list");
+        List<Map<String, String>> resp = driveService.fetchImages();
+        log.info("Returning {} images to client", resp.size());
+        return resp;
+    }
+
     @GetMapping("/api/images/{id}")
     @CrossOrigin(origins = "https://sebbsoon.github.io")
     public void getImage(@PathVariable String id, HttpServletResponse response) {
@@ -50,7 +62,6 @@ public class ImagesController {
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
         }
     }
-
 
     @GetMapping("/api/filter")
     @CrossOrigin(origins = "https://sebbsoon.github.io")
