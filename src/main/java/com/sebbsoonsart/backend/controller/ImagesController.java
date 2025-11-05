@@ -7,6 +7,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.catalina.connector.ClientAbortException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -57,8 +58,19 @@ public class ImagesController {
             inputStream.transferTo(outputStream);
             outputStream.flush();
 
-        } catch (IOException | InterruptedException e) {
-            log.error("Failed to stream image {}", id, e);
+        } catch (ClientAbortException e) {
+            log.warn("Client aborted while streaming image {} — connection closed by client", id);
+
+        } catch (IOException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
+                log.warn("Broken pipe while streaming image {} — likely client disconnected", id);
+            } else {
+                log.error("I/O error while streaming image {}", id, e);
+                response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Image stream interrupted for {}", id, e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
         }
     }
