@@ -2,6 +2,8 @@ package com.sebbsoonsart.backend.service;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -16,6 +18,8 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
 
 @Service
 public class GoogleDriveService {
@@ -143,25 +148,6 @@ public class GoogleDriveService {
         }
     }
 
-    public byte[] downloadImage(String fileId, String mimeType) throws IOException, InterruptedException {
-
-        String url = "https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&key=" + apiKey;
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-
-        if (response.statusCode() != 200) {
-            throw new IOException(
-                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
-        }
-
-        byte[] data = response.body();
-        return data;
-    }
-
     private String buildRequestUrl(String folderId, String apiKey) {
         String query = String.format("'%s' in parents", folderId);
         String encodedQuery = URLEncoder.encode(query, StandardCharsets.UTF_8);
@@ -195,24 +181,77 @@ public class GoogleDriveService {
         return images;
     }
 
-    public java.io.InputStream downloadImageAsStream(String fileId) throws IOException, InterruptedException {
-        String url = "https://www.googleapis.com/drive/v3/files/" + fileId + "?alt=media&key=" + apiKey;
+    public String detectMimeType(String fileId) throws IOException, InterruptedException {
+        String url = String.format(
+                "https://www.googleapis.com/drive/v3/files/%s?fields=mimeType&key=%s",
+                fileId, apiKey);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .GET()
                 .build();
 
-        HttpResponse<java.io.InputStream> response = httpClient.send(
-                request,
-                HttpResponse.BodyHandlers.ofInputStream()
-        );
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
-            throw new IOException(
-                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
+            log.warn("Failed to fetch MIME type for file {}: status {}", fileId, response.statusCode());
+            return MediaType.APPLICATION_OCTET_STREAM_VALUE; // fallback
         }
 
-        return response.body();
+        JsonNode root = mapper.readTree(response.body());
+        return root.path("mimeType").asText(MediaType.APPLICATION_OCTET_STREAM_VALUE);
     }
+
+    public void streamImage(String fileId, HttpServletResponse response)
+            throws IOException, InterruptedException {
+
+        String mimeType = detectMimeType(fileId);
+        response.setContentType(mimeType);
+        response.setHeader("Cache-Control", "public, max-age=3600"); // browser cache 1h
+
+        String url = String.format(
+                "https://www.googleapis.com/drive/v3/files/%s?alt=media&key=%s",
+                fileId, apiKey);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
+        HttpResponse<InputStream> driveResponse = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+
+        int status = driveResponse.statusCode();
+
+        if (status == 403) {
+            log.warn("Access denied while streaming image {} (403)", fileId);
+            driveResponse.body().close();
+            response.setStatus(HttpStatus.FORBIDDEN.value());
+            return;
+        }
+
+        if (status == 404) {
+            log.warn("Image {} not found on Google Drive (404)", fileId);
+            driveResponse.body().close();
+            response.setStatus(HttpStatus.NOT_FOUND.value());
+            return;
+        }
+
+        if (status != 200) {
+            log.error("Unexpected status {} for image {}", status, fileId);
+            driveResponse.body().close();
+            response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return;
+        }
+
+        response.setHeader("Cache-Control", "public, max-age=3600");
+        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
+
+        try (InputStream input = driveResponse.body();
+                OutputStream output = response.getOutputStream()) {
+
+            input.transferTo(output);
+            output.flush();
+        }
+    }
+
 }

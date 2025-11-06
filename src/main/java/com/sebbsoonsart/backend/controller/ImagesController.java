@@ -1,8 +1,6 @@
 package com.sebbsoonsart.backend.controller;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -11,7 +9,6 @@ import org.apache.catalina.connector.ClientAbortException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,7 +33,6 @@ public class ImagesController {
 
     @GetMapping("/api/images")
     @CrossOrigin(origins = "https://sebbsoon.github.io")
-
     public List<Map<String, String>> getImages() {
 
         log.info("Received request to fetch image list");
@@ -50,17 +46,12 @@ public class ImagesController {
     public void getImage(@PathVariable String id, HttpServletResponse response) {
         log.info("Streaming image {}", id);
 
-        response.setContentType(MediaType.IMAGE_JPEG_VALUE);
-
-        try (InputStream inputStream = driveService.downloadImageAsStream(id);
-                OutputStream outputStream = response.getOutputStream()) {
-
-            inputStream.transferTo(outputStream);
-            outputStream.flush();
-
+        try {
+            driveService.streamImage(id, response);
+       
         } catch (ClientAbortException e) {
-            log.warn("Client aborted while streaming image {} — connection closed by client", id);
-
+            log.warn("Client aborted connection while streaming image {}", id);
+        
         } catch (IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
                 log.warn("Broken pipe while streaming image {} — likely client disconnected", id);
@@ -68,6 +59,7 @@ public class ImagesController {
                 log.error("I/O error while streaming image {}", id, e);
                 response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
             }
+        
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Image stream interrupted for {}", id, e);
