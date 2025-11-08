@@ -10,10 +10,12 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +35,8 @@ import jakarta.servlet.http.HttpServletResponse;
 public class GoogleDriveService {
 
     private static final Logger log = LoggerFactory.getLogger(GoogleDriveService.class);
+    private final Map<String, CachedImage> cache = new ConcurrentHashMap<>();
+    private final long CACHE_TTL = 1000 * 60 * 10;
 
     @Value("${google.api.key}")
     private String apiKey;
@@ -202,6 +206,31 @@ public class GoogleDriveService {
         return root.path("mimeType").asText(MediaType.APPLICATION_OCTET_STREAM_VALUE);
     }
 
+    public byte[] downloadThumbnail(String fileId, String mimeType) throws IOException, InterruptedException {
+        CachedImage cached = cache.get(fileId);
+        if (cached != null && Instant.now().toEpochMilli() - cached.timestamp < CACHE_TTL) {
+            return cached.data;
+        }
+
+        String metadataUrl = "https://www.googleapis.com/drive/v3/files/" + fileId + "?fields=thumbnailLink&key="
+                + apiKey;
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(metadataUrl))
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+
+        if (response.statusCode() != 200) {
+            throw new IOException(
+                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
+        }
+
+        byte[] data = response.body();
+        cache.put(fileId, new CachedImage(data));
+        return data;
+    }
+
     public void streamImage(String fileId, HttpServletResponse response)
             throws IOException, InterruptedException {
 
@@ -251,6 +280,16 @@ public class GoogleDriveService {
 
             input.transferTo(output);
             output.flush();
+        }
+    }
+
+    private static class CachedImage {
+        final byte[] data;
+        final long timestamp;
+
+        CachedImage(byte[] data) {
+            this.data = data;
+            this.timestamp = Instant.now().toEpochMilli();
         }
     }
 

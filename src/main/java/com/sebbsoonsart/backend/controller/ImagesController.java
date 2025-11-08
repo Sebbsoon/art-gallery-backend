@@ -8,7 +8,9 @@ import java.util.Map;
 import org.apache.catalina.connector.ClientAbortException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +26,6 @@ import jakarta.servlet.http.HttpServletResponse;
 @RestController
 public class ImagesController {
     private static final Logger log = LoggerFactory.getLogger(ImagesController.class);
-
     private final GoogleDriveService driveService;
 
     public ImagesController(GoogleDriveService driveService) {
@@ -48,10 +49,10 @@ public class ImagesController {
 
         try {
             driveService.streamImage(id, response);
-       
+
         } catch (ClientAbortException e) {
             log.warn("Client aborted connection while streaming image {}", id);
-        
+
         } catch (IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("Broken pipe")) {
                 log.warn("Broken pipe while streaming image {} — likely client disconnected", id);
@@ -59,11 +60,36 @@ public class ImagesController {
                 log.error("I/O error while streaming image {}", id, e);
                 response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
             }
-        
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("Image stream interrupted for {}", id, e);
             response.setStatus(HttpStatus.INTERNAL_SERVER_ERROR.value());
+        }
+    }
+
+    @GetMapping("api/thumbnail/{id}")
+    @CrossOrigin(origins = "https://sebbsoon.github.io")
+    public ResponseEntity<byte[]> getThumbnail(@PathVariable String id) {
+        log.info("Received request to fetch thumbnail with ID={}", id);
+        try {
+            String mimeType = MediaType.IMAGE_JPEG_VALUE;
+
+            byte[] data = driveService.downloadThumbnail(id, mimeType);
+
+            log.info("Successfully fetched thumbnail {} ({} bytes)", id, data.length);
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_TYPE, mimeType)
+                    .body(data);
+
+        } catch (IOException e) {
+            log.error("I/O error while fetching thumbnail {}", id, e);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Thumbnail fetch interrupted for ID={}", id, e);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
     }
 
