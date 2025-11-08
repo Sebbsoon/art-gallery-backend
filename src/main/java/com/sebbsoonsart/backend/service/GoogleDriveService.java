@@ -27,6 +27,8 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.auth.oauth2.GoogleCredentials;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
@@ -212,22 +214,41 @@ public class GoogleDriveService {
             return cached.data;
         }
 
-        String metadataUrl = "https://www.googleapis.com/drive/v3/files/" + fileId + "?fields=thumbnailLink&key="
-                + apiKey;
-        HttpRequest request = HttpRequest.newBuilder()
+        String metadataUrl = "https://www.googleapis.com/drive/v3/files/" + fileId
+                + "?fields=thumbnailLink&key=" + apiKey;
+        HttpRequest metadataRequest = HttpRequest.newBuilder()
                 .uri(URI.create(metadataUrl))
                 .GET()
                 .build();
 
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-
-        if (response.statusCode() != 200) {
+        HttpResponse<String> metadataResponse = httpClient.send(metadataRequest, HttpResponse.BodyHandlers.ofString());
+        if (metadataResponse.statusCode() != 200) {
             throw new IOException(
-                    "Failed to fetch file " + fileId + " from Google Drive, status: " + response.statusCode());
+                    "Failed to fetch metadata for file " + fileId + ", status: " + metadataResponse.statusCode());
         }
 
-        byte[] data = response.body();
+        String body = metadataResponse.body();
+
+        JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+        if (!json.has("thumbnailLink")) {
+            throw new IOException("No thumbnailLink found in metadata for file " + fileId);
+        }
+        String thumbnailLink = json.get("thumbnailLink").getAsString();
+
+        HttpRequest thumbRequest = HttpRequest.newBuilder()
+                .uri(URI.create(thumbnailLink))
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> thumbResponse = httpClient.send(thumbRequest, HttpResponse.BodyHandlers.ofByteArray());
+        if (thumbResponse.statusCode() != 200) {
+            throw new IOException(
+                    "Failed to download thumbnail for file " + fileId + ", status: " + thumbResponse.statusCode());
+        }
+
+        byte[] data = thumbResponse.body();
         cache.put(fileId, new CachedImage(data));
+
         return data;
     }
 
